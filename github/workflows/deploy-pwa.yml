@@ -1,0 +1,56 @@
+name: نشر تطبيق PWA على GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: تنزيل الكود
+        uses: actions/checkout@v4
+
+      - name: فك ضغط أول ملف zip في المستودع
+        run: |
+          mkdir -p site
+          ZIP_FILE=$(find . -maxdepth 2 -iname "*.zip" | head -n 1)
+          if [ -z "$ZIP_FILE" ]; then
+            echo "مفيش ملف zip في المستودع"
+            exit 1
+          fi
+          echo "هيتم فك: $ZIP_FILE"
+          unzip -o "$ZIP_FILE" -d site
+
+          # لو كل المحتوى جوه مجلد واحد بس (زي pwa/) ننقله لجذر site
+          if [ "$(find site -mindepth 1 -maxdepth 1 -type d | wc -l)" = "1" ] && \
+             [ "$(find site -mindepth 1 -maxdepth 1 -type f | wc -l)" = "0" ]; then
+            INNER=$(find site -mindepth 1 -maxdepth 1 -type d)
+            shopt -s dotglob
+            mv "$INNER"/* site/
+            rmdir "$INNER"
+          fi
+
+      - name: تجهيز الصفحة كـ artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: نشر على GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
